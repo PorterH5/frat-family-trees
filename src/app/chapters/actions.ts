@@ -87,10 +87,20 @@ export async function createMemberAction(
   if (data.bigId) {
     const big = await prisma.member.findUnique({
       where: { id: data.bigId },
-      select: { chapterId: true },
+      select: { chapterId: true, pledgeClass: true },
     });
     if (!big || big.chapterId !== chapterId) {
       return { error: "Selected big is not in this chapter." };
+    }
+    if (
+      data.pledgeClass &&
+      big.pledgeClass &&
+      big.pledgeClass.trim().toLowerCase() ===
+        data.pledgeClass.trim().toLowerCase()
+    ) {
+      return {
+        error: "A big must be from a different pledge class.",
+      };
     }
   }
   const chapter = await prisma.chapter.findUnique({
@@ -150,10 +160,20 @@ export async function updateMemberAction(
     }
     const big = await prisma.member.findUnique({
       where: { id: data.bigId },
-      select: { chapterId: true },
+      select: { chapterId: true, pledgeClass: true },
     });
     if (!big || big.chapterId !== chapterId) {
       return { error: "Selected big is not in this chapter." };
+    }
+    if (
+      data.pledgeClass &&
+      big.pledgeClass &&
+      big.pledgeClass.trim().toLowerCase() ===
+        data.pledgeClass.trim().toLowerCase()
+    ) {
+      return {
+        error: "A big must be from a different pledge class.",
+      };
     }
   }
   const chapter = await prisma.chapter.findUnique({
@@ -288,13 +308,26 @@ export async function bulkAddPledgeClassAction(
   });
   if (!chapter) return { error: "Chapter not found." };
 
-  // Existing members in chapter to resolve big-by-name references.
+  // Only resolve big-by-name references against members in OTHER pledge
+  // classes — a big must come from an earlier class.
+  const normalizedPledgeClass = pledgeClass.trim().toLowerCase();
   const existing = await prisma.member.findMany({
     where: { chapterId },
-    select: { id: true, firstName: true, lastName: true, nickname: true },
+    select: {
+      id: true,
+      firstName: true,
+      lastName: true,
+      nickname: true,
+      pledgeClass: true,
+    },
   });
   const byName = new Map<string, string>();
   for (const m of existing) {
+    if (
+      (m.pledgeClass ?? "").trim().toLowerCase() === normalizedPledgeClass
+    ) {
+      continue;
+    }
     const full = [m.firstName, m.lastName].filter(Boolean).join(" ").toLowerCase();
     byName.set(full, m.id);
     if (m.nickname) byName.set(m.nickname.toLowerCase(), m.id);
@@ -305,7 +338,7 @@ export async function bulkAddPledgeClassAction(
       n.bigName && byName.get(n.bigName.toLowerCase())
         ? byName.get(n.bigName.toLowerCase())!
         : null;
-    const created = await prisma.member.create({
+    await prisma.member.create({
       data: {
         chapterId,
         firstName: n.firstName,
@@ -316,12 +349,6 @@ export async function bulkAddPledgeClassAction(
         createdById: user.id,
       },
     });
-    const full = [created.firstName, created.lastName]
-      .filter(Boolean)
-      .join(" ")
-      .toLowerCase();
-    byName.set(full, created.id);
-    if (created.nickname) byName.set(created.nickname.toLowerCase(), created.id);
   }
 
   revalidatePath(`/chapters/${chapter.slug}`);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useState } from "react";
 import {
   createMemberAction,
   updateMemberAction,
@@ -51,9 +51,15 @@ export function MemberForm({
       : updateMemberAction.bind(null, chapterId);
   const [state, action, pending] = useActionState(bound, initial);
 
-  const bigOptions = existing
-    ? members.filter((m) => m.id !== existing.id)
-    : members;
+  const [pledgeClass, setPledgeClass] = useState(existing?.pledgeClass ?? "");
+  const normalizedPledgeClass = pledgeClass.trim().toLowerCase();
+
+  const bigOptions = members.filter((m) => {
+    if (existing && m.id === existing.id) return false;
+    if (!normalizedPledgeClass) return true;
+    const candidatePc = (m.pledgeClass ?? "").trim().toLowerCase();
+    return candidatePc !== normalizedPledgeClass;
+  });
 
   return (
     <form action={action} className="flex flex-col gap-3">
@@ -91,7 +97,8 @@ export function MemberForm({
         Pledge class <span className="text-zinc-500">(e.g. &ldquo;Fall 2023&rdquo;)</span>
         <input
           name="pledgeClass"
-          defaultValue={existing?.pledgeClass ?? ""}
+          value={pledgeClass}
+          onChange={(e) => setPledgeClass(e.target.value)}
           className="rounded border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2"
         />
       </label>
@@ -100,6 +107,7 @@ export function MemberForm({
         <select
           name="bigId"
           defaultValue={existing?.bigId ?? ""}
+          key={normalizedPledgeClass}
           className="rounded border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2"
         >
           <option value="">— No big / founding member —</option>
@@ -109,6 +117,10 @@ export function MemberForm({
             </option>
           ))}
         </select>
+        <span className="text-xs text-zinc-500">
+          Members in the same pledge class are hidden — a big must come from a
+          different pledge class.
+        </span>
       </label>
       <label className="flex flex-col gap-1 text-sm">
         Notes <span className="text-zinc-500">(optional)</span>
