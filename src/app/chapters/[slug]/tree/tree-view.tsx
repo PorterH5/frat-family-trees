@@ -8,6 +8,9 @@ const Tree = dynamic(() => import("react-d3-tree").then((m) => m.Tree), {
   ssr: false,
 });
 
+const NODE_W = 200;
+const NODE_H = 72;
+
 export function TreeView({ forest }: { forest: TreeNode[] }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [translate, setTranslate] = useState({ x: 200, y: 60 });
@@ -34,6 +37,21 @@ export function TreeView({ forest }: { forest: TreeNode[] }) {
 
   return (
     <div className="h-full w-full flex flex-col">
+      {/* Styles for react-d3-tree links and text rendering. Scoped via the
+          .frat-tree wrapper so this doesn't affect anything else. */}
+      <style>{`
+        .frat-tree .rd3t-link {
+          stroke: #52525b;
+          stroke-width: 2;
+          fill: none;
+          stroke-linecap: round;
+          stroke-linejoin: round;
+        }
+        .frat-tree .rd3t-tree-container svg {
+          text-rendering: geometricPrecision;
+          shape-rendering: geometricPrecision;
+        }
+      `}</style>
       {forest.length > 1 && (
         <div className="flex flex-wrap gap-2 p-3 border-b border-zinc-200 dark:border-zinc-800 bg-zinc-50 dark:bg-zinc-900">
           <button
@@ -61,7 +79,7 @@ export function TreeView({ forest }: { forest: TreeNode[] }) {
           ))}
         </div>
       )}
-      <div ref={containerRef} className="flex-1 w-full">
+      <div ref={containerRef} className="flex-1 w-full frat-tree">
         <Tree
           data={toShow}
           orientation="vertical"
@@ -69,45 +87,74 @@ export function TreeView({ forest }: { forest: TreeNode[] }) {
           zoomable
           collapsible={false}
           pathFunc="elbow"
-          separation={{ siblings: 1.2, nonSiblings: 1.4 }}
-          nodeSize={{ x: 200, y: 100 }}
+          separation={{ siblings: 1.4, nonSiblings: 1.6 }}
+          nodeSize={{ x: NODE_W + 40, y: NODE_H + 60 }}
           renderCustomNodeElement={({ nodeDatum }) => {
             const pledge = nodeDatum.attributes?.pledgeClass as
               | string
               | undefined;
             return (
               <g>
-                <rect
-                  width={180}
-                  height={56}
-                  x={-90}
-                  y={-28}
-                  rx={8}
-                  ry={8}
-                  fill="#ffffff"
-                  stroke="#3f3f46"
-                  strokeWidth={1}
-                />
-                <text
-                  textAnchor="middle"
-                  y={-6}
-                  className="fill-zinc-900"
-                  style={{ fontSize: 13, fontWeight: 600 }}
+                {/* HTML-rendered card via foreignObject — gives us crisp,
+                    subpixel-accurate text rendering instead of fuzzy SVG text. */}
+                <foreignObject
+                  x={-NODE_W / 2}
+                  y={-NODE_H / 2}
+                  width={NODE_W}
+                  height={NODE_H}
                 >
-                  {nodeDatum.name.length > 24
-                    ? nodeDatum.name.slice(0, 22) + "…"
-                    : nodeDatum.name}
-                </text>
-                {pledge && (
-                  <text
-                    textAnchor="middle"
-                    y={14}
-                    className="fill-zinc-500"
-                    style={{ fontSize: 11 }}
+                  <div
+                    style={{
+                      width: NODE_W,
+                      height: NODE_H,
+                      boxSizing: "border-box",
+                      display: "flex",
+                      flexDirection: "column",
+                      alignItems: "center",
+                      justifyContent: "center",
+                      gap: 2,
+                      padding: "6px 10px",
+                      background: "#ffffff",
+                      border: "1.5px solid #3f3f46",
+                      borderRadius: 10,
+                      boxShadow: "0 1px 2px rgba(0,0,0,0.04)",
+                      fontFamily:
+                        'system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+                      color: "#18181b",
+                      textAlign: "center",
+                      lineHeight: 1.2,
+                      overflow: "hidden",
+                    }}
                   >
-                    {pledge}
-                  </text>
-                )}
+                    <div
+                      style={{
+                        fontSize: 14,
+                        fontWeight: 600,
+                        whiteSpace: "nowrap",
+                        overflow: "hidden",
+                        textOverflow: "ellipsis",
+                        width: "100%",
+                      }}
+                      title={nodeDatum.name}
+                    >
+                      {nodeDatum.name}
+                    </div>
+                    {pledge && (
+                      <div
+                        style={{
+                          fontSize: 11,
+                          color: "#71717a",
+                          whiteSpace: "nowrap",
+                          overflow: "hidden",
+                          textOverflow: "ellipsis",
+                          width: "100%",
+                        }}
+                      >
+                        {pledge}
+                      </div>
+                    )}
+                  </div>
+                </foreignObject>
               </g>
             );
           }}
