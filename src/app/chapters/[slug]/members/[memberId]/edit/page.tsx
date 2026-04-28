@@ -22,6 +22,7 @@ export default async function EditMemberPage({
           lastName: true,
           nickname: true,
           pledgeClass: true,
+          bigId: true,
         },
       },
     },

@@ -182,17 +182,98 @@ export async function updateMemberAction(
   });
   if (!chapter) return { error: "Chapter not found." };
 
-  await prisma.member.update({
-    where: { id: memberId },
-    data: {
-      firstName: data.firstName,
-      lastName: data.lastName ?? null,
-      nickname: data.nickname ?? null,
-      pledgeClass: data.pledgeClass ?? null,
-      bigId: data.bigId ?? null,
-      notes: data.notes ?? null,
-    },
+  // ----- Littles handling --------------------------------------------------
+  // The form posts every checked little as `littleIds`. We compare against
+  // the current set (members with `bigId === memberId`) and:
+  //   - clear `bigId` on previously-assigned littles that were unchecked
+  //   - set `bigId = memberId` on newly-checked candidates (validated below)
+  const rawLittleIds = formData.getAll("littleIds");
+  const requestedLittleIds = new Set<string>(
+    rawLittleIds.filter((v): v is string => typeof v === "string"),
+  );
+
+  if (requestedLittleIds.size > 0) {
+    // Validate every requested little belongs to this chapter, isn't the
+    // member themself, isn't an ancestor of the member (would form a cycle),
+    // and isn't in the same pledge class.
+    const allChapterMembers = await prisma.member.findMany({
+      where: { chapterId },
+      select: { id: true, bigId: true, pledgeClass: true },
+    });
+    const byId = new Map<string, { bigId: string | null; pledgeClass: string | null }>();
+    for (const m of allChapterMembers) {
+      byId.set(m.id, { bigId: m.bigId, pledgeClass: m.pledgeClass });
+    }
+    // Walk current member's ancestor chain.
+    const ancestorIds = new Set<string>();
+    let cursor: string | null | undefined = data.bigId ?? existing.bigId;
+    while (cursor && !ancestorIds.has(cursor)) {
+      ancestorIds.add(cursor);
+      cursor = byId.get(cursor)?.bigId ?? null;
+    }
+    const currentPledgeClass = (data.pledgeClass ?? "").trim().toLowerCase();
+    for (const id of requestedLittleIds) {
+      if (id === memberId) {
+        return { error: "A member cannot be their own little." };
+      }
+      const candidate = byId.get(id);
+      if (!candidate) {
+        return { error: "Selected little is not in this chapter." };
+      }
+      if (ancestorIds.has(id)) {
+        return {
+          error:
+            "Cannot assign a member who is in your big chain as a little (would create a cycle).",
+        };
+      }
+      if (
+        currentPledgeClass &&
+        (candidate.pledgeClass ?? "").trim().toLowerCase() ===
+          currentPledgeClass
+      ) {
+        return {
+          error: "A little must be from a different pledge class.",
+        };
+      }
+    }
+  }
+
+  // Determine which littles to clear: those that previously had bigId === memberId
+  // but are not in the requested set.
+  const previousLittles = await prisma.member.findMany({
+    where: { bigId: memberId, chapterId },
+    select: { id: true },
   });
+  const toClear = previousLittles
+    .map((m) => m.id)
+    .filter((id) => !requestedLittleIds.has(id));
+
+  await prisma.$transaction(async (tx) => {
+    await tx.member.update({
+      where: { id: memberId },
+      data: {
+        firstName: data.firstName,
+        lastName: data.lastName ?? null,
+        nickname: data.nickname ?? null,
+        pledgeClass: data.pledgeClass ?? null,
+        bigId: data.bigId ?? null,
+        notes: data.notes ?? null,
+      },
+    });
+    if (toClear.length > 0) {
+      await tx.member.updateMany({
+        where: { id: { in: toClear }, chapterId },
+        data: { bigId: null },
+      });
+    }
+    if (requestedLittleIds.size > 0) {
+      await tx.member.updateMany({
+        where: { id: { in: [...requestedLittleIds] }, chapterId },
+        data: { bigId: memberId },
+      });
+    }
+  });
+
   revalidatePath(`/chapters/${chapter.slug}`);
   revalidatePath(`/chapters/${chapter.slug}/tree`);
   redirect(`/chapters/${chapter.slug}`);

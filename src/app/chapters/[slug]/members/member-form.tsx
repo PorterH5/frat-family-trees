@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import {
   createMemberAction,
   updateMemberAction,
@@ -15,6 +15,7 @@ type MemberOption = {
   lastName: string | null;
   nickname: string | null;
   pledgeClass: string | null;
+  bigId?: string | null;
 };
 
 type ExistingMember = {
@@ -32,6 +33,23 @@ function memberLabel(m: MemberOption): string {
   const nick = m.nickname ? ` "${m.nickname}"` : "";
   const pc = m.pledgeClass ? ` · ${m.pledgeClass}` : "";
   return `${full}${nick}${pc}`;
+}
+
+/**
+ * Walk up the bigId chain starting from `startId` and return the set of
+ * ancestor member IDs (not including `startId`).
+ */
+function ancestorsOf(
+  startId: string,
+  byId: Map<string, MemberOption>,
+): Set<string> {
+  const seen = new Set<string>();
+  let cursor: string | null | undefined = byId.get(startId)?.bigId ?? null;
+  while (cursor && !seen.has(cursor)) {
+    seen.add(cursor);
+    cursor = byId.get(cursor)?.bigId ?? null;
+  }
+  return seen;
 }
 
 export function MemberForm({
@@ -54,12 +72,56 @@ export function MemberForm({
   const [pledgeClass, setPledgeClass] = useState(existing?.pledgeClass ?? "");
   const normalizedPledgeClass = pledgeClass.trim().toLowerCase();
 
+  const byId = useMemo(() => {
+    const m = new Map<string, MemberOption>();
+    for (const x of members) m.set(x.id, x);
+    return m;
+  }, [members]);
+
+  const existingLittleIds = useMemo(() => {
+    if (!existing) return new Set<string>();
+    const s = new Set<string>();
+    for (const m of members) if (m.bigId === existing.id) s.add(m.id);
+    return s;
+  }, [members, existing]);
+
+  const [selectedLittles, setSelectedLittles] = useState<Set<string>>(
+    () => new Set(existingLittleIds),
+  );
+
+  const toggleLittle = (id: string) => {
+    setSelectedLittles((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
   const bigOptions = members.filter((m) => {
     if (existing && m.id === existing.id) return false;
     if (!normalizedPledgeClass) return true;
     const candidatePc = (m.pledgeClass ?? "").trim().toLowerCase();
     return candidatePc !== normalizedPledgeClass;
   });
+
+  // Candidates eligible to be a *little* of `existing`. Excludes self,
+  // members in the same pledge class, and members in the current member's
+  // ancestor chain (which would form a cycle if they became a little).
+  const ancestorIds = useMemo(() => {
+    if (!existing) return new Set<string>();
+    return ancestorsOf(existing.id, byId);
+  }, [existing, byId]);
+
+  const littleCandidates = existing
+    ? members.filter((m) => {
+        if (m.id === existing.id) return false;
+        if (ancestorIds.has(m.id)) return false;
+        if (!normalizedPledgeClass) return true;
+        const candidatePc = (m.pledgeClass ?? "").trim().toLowerCase();
+        return candidatePc !== normalizedPledgeClass;
+      })
+    : [];
 
   return (
     <form action={action} className="flex flex-col gap-3">
@@ -122,6 +184,66 @@ export function MemberForm({
           different pledge class.
         </span>
       </label>
+
+      {existing && (
+        <fieldset className="flex flex-col gap-2 rounded border border-zinc-200 dark:border-zinc-800 p-3">
+          <legend className="px-1 text-sm font-medium">Littles</legend>
+          {littleCandidates.length === 0 ? (
+            <p className="text-xs text-zinc-500">
+              {pledgeClass.trim()
+                ? `No eligible candidates outside the "${pledgeClass.trim()}" pledge class yet.`
+                : "Add a pledge class above to filter candidates."}
+            </p>
+          ) : (
+            <div className="flex flex-col gap-1 max-h-56 overflow-y-auto pr-1">
+              {littleCandidates.map((m) => {
+                const checked = selectedLittles.has(m.id);
+                const currentBig = m.bigId;
+                const stolenFromOther =
+                  checked &&
+                  currentBig &&
+                  currentBig !== existing.id &&
+                  !existingLittleIds.has(m.id);
+                return (
+                  <label
+                    key={m.id}
+                    className="flex items-start gap-2 text-sm cursor-pointer rounded px-2 py-1 hover:bg-zinc-50 dark:hover:bg-zinc-900"
+                  >
+                    <input
+                      type="checkbox"
+                      name="littleIds"
+                      value={m.id}
+                      checked={checked}
+                      onChange={() => toggleLittle(m.id)}
+                      className="mt-1"
+                    />
+                    <span className="flex flex-col">
+                      <span>{memberLabel(m)}</span>
+                      {currentBig &&
+                        currentBig !== existing.id &&
+                        !checked && (
+                          <span className="text-xs text-zinc-500">
+                            currently has another big
+                          </span>
+                        )}
+                      {stolenFromOther && (
+                        <span className="text-xs text-amber-600">
+                          will be reassigned from their current big
+                        </span>
+                      )}
+                    </span>
+                  </label>
+                );
+              })}
+            </div>
+          )}
+          <span className="text-xs text-zinc-500">
+            Checking someone here makes them this member&rsquo;s little (sets
+            their big). Unchecking an existing little clears their big.
+          </span>
+        </fieldset>
+      )}
+
       <label className="flex flex-col gap-1 text-sm">
         Notes <span className="text-zinc-500">(optional)</span>
         <textarea
