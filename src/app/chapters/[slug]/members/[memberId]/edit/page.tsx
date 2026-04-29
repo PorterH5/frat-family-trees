@@ -33,6 +33,14 @@ export default async function EditMemberPage({
   const existing = await prisma.member.findUnique({ where: { id: memberId } });
   if (!existing || existing.chapterId !== chapter.id) notFound();
 
+  const pledgeClasses = Array.from(
+    new Set(
+      chapter.members
+        .map((m) => m.pledgeClass?.trim())
+        .filter((v): v is string => !!v),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
   return (
     <div className="mx-auto max-w-lg px-6 py-10">
       <Link
@@ -46,6 +54,8 @@ export default async function EditMemberPage({
         <MemberForm
           chapterId={chapter.id}
           members={chapter.members}
+          pledgeClasses={pledgeClasses}
+          chapterSlug={chapter.slug}
           mode="edit"
           existing={existing}
         />

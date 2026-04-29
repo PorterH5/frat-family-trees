@@ -30,6 +30,14 @@ export default async function NewMemberPage({
   if (!chapter) notFound();
   await requireChapterMembership(user.id, chapter.id);
 
+  const pledgeClasses = Array.from(
+    new Set(
+      chapter.members
+        .map((m) => m.pledgeClass?.trim())
+        .filter((v): v is string => !!v),
+    ),
+  ).sort((a, b) => a.localeCompare(b));
+
   return (
     <div className="mx-auto max-w-lg px-6 py-10">
       <Link
@@ -43,6 +51,8 @@ export default async function NewMemberPage({
         <MemberForm
           chapterId={chapter.id}
           members={chapter.members}
+          pledgeClasses={pledgeClasses}
+          chapterSlug={chapter.slug}
           mode="create"
         />
       </div>

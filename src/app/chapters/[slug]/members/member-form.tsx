@@ -55,11 +55,15 @@ function ancestorsOf(
 export function MemberForm({
   chapterId,
   members,
+  pledgeClasses,
+  chapterSlug,
   mode,
   existing,
 }: {
   chapterId: string;
   members: MemberOption[];
+  pledgeClasses: string[];
+  chapterSlug: string;
   mode: "create" | "edit";
   existing?: ExistingMember;
 }) {
@@ -156,13 +160,55 @@ export function MemberForm({
         />
       </label>
       <label className="flex flex-col gap-1 text-sm">
-        Pledge class <span className="text-zinc-500">(e.g. &ldquo;Fall 2023&rdquo;)</span>
-        <input
-          name="pledgeClass"
-          value={pledgeClass}
-          onChange={(e) => setPledgeClass(e.target.value)}
-          className="rounded border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2"
-        />
+        Pledge class
+        {pledgeClasses.length === 0 ? (
+          <>
+            <input
+              name="pledgeClass"
+              value={pledgeClass}
+              onChange={(e) => setPledgeClass(e.target.value)}
+              placeholder="e.g. Fall 2023"
+              className="rounded border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2"
+            />
+            <span className="text-xs text-zinc-500">
+              No pledge classes yet. Typing one here will create it.
+            </span>
+          </>
+        ) : (
+          <>
+            <select
+              name="pledgeClass"
+              value={pledgeClass}
+              onChange={(e) => setPledgeClass(e.target.value)}
+              className="rounded border border-zinc-300 dark:border-zinc-700 bg-transparent px-3 py-2"
+            >
+              <option value="">— No pledge class —</option>
+              {pledgeClasses.map((pc) => (
+                <option key={pc} value={pc}>
+                  {pc}
+                </option>
+              ))}
+              {/* If the existing member's class isn't in the current list
+                  (e.g. stale trim difference), include it so save doesn't wipe. */}
+              {existing?.pledgeClass &&
+                !pledgeClasses.includes(existing.pledgeClass) && (
+                  <option value={existing.pledgeClass}>
+                    {existing.pledgeClass}
+                  </option>
+                )}
+            </select>
+            <span className="text-xs text-zinc-500">
+              To create a new pledge class, use{" "}
+              <a
+                href={`/chapters/${chapterSlug}/members/bulk`}
+                className="underline hover:text-zinc-700 dark:hover:text-zinc-300"
+              >
+                Bulk add pledge class
+              </a>
+              .
+            </span>
+          </>
+        )}
       </label>
       <label className="flex flex-col gap-1 text-sm">
         Big <span className="text-zinc-500">(optional)</span>
