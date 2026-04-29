@@ -7,6 +7,10 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { requireUser, requireChapterMembership } from "@/lib/auth";
 import { makeSlug } from "@/lib/slug";
+import {
+  isEarlierPledgeClass,
+  isLaterPledgeClass,
+} from "@/lib/pledge-class";
 
 const chapterSchema = z.object({
   fraternity: z.string().min(1).max(100),
@@ -94,12 +98,11 @@ export async function createMemberAction(
     }
     if (
       data.pledgeClass &&
-      big.pledgeClass &&
-      big.pledgeClass.trim().toLowerCase() ===
-        data.pledgeClass.trim().toLowerCase()
+      !isEarlierPledgeClass(big.pledgeClass, data.pledgeClass)
     ) {
       return {
-        error: "A big must be from a different pledge class.",
+        error:
+          "A big must be from a pledge class that is strictly earlier than this member's class.",
       };
     }
   }
@@ -167,12 +170,11 @@ export async function updateMemberAction(
     }
     if (
       data.pledgeClass &&
-      big.pledgeClass &&
-      big.pledgeClass.trim().toLowerCase() ===
-        data.pledgeClass.trim().toLowerCase()
+      !isEarlierPledgeClass(big.pledgeClass, data.pledgeClass)
     ) {
       return {
-        error: "A big must be from a different pledge class.",
+        error:
+          "A big must be from a pledge class that is strictly earlier than this member's class.",
       };
     }
   }
@@ -211,7 +213,6 @@ export async function updateMemberAction(
       ancestorIds.add(cursor);
       cursor = byId.get(cursor)?.bigId ?? null;
     }
-    const currentPledgeClass = (data.pledgeClass ?? "").trim().toLowerCase();
     for (const id of requestedLittleIds) {
       if (id === memberId) {
         return { error: "A member cannot be their own little." };
@@ -227,12 +228,12 @@ export async function updateMemberAction(
         };
       }
       if (
-        currentPledgeClass &&
-        (candidate.pledgeClass ?? "").trim().toLowerCase() ===
-          currentPledgeClass
+        data.pledgeClass &&
+        !isLaterPledgeClass(candidate.pledgeClass, data.pledgeClass)
       ) {
         return {
-          error: "A little must be from a different pledge class.",
+          error:
+            "A little must be from a pledge class that is strictly later than this member's class.",
         };
       }
     }
@@ -389,9 +390,9 @@ export async function bulkAddPledgeClassAction(
   });
   if (!chapter) return { error: "Chapter not found." };
 
-  // Only resolve big-by-name references against members in OTHER pledge
-  // classes — a big must come from an earlier class.
-  const normalizedPledgeClass = pledgeClass.trim().toLowerCase();
+  // Only resolve big-by-name references against members in a strictly
+  // EARLIER pledge class than the one we're creating — a big must come
+  // from before.
   const existing = await prisma.member.findMany({
     where: { chapterId },
     select: {
@@ -404,11 +405,7 @@ export async function bulkAddPledgeClassAction(
   });
   const byName = new Map<string, string>();
   for (const m of existing) {
-    if (
-      (m.pledgeClass ?? "").trim().toLowerCase() === normalizedPledgeClass
-    ) {
-      continue;
-    }
+    if (!isEarlierPledgeClass(m.pledgeClass, pledgeClass)) continue;
     const full = [m.firstName, m.lastName].filter(Boolean).join(" ").toLowerCase();
     byName.set(full, m.id);
     if (m.nickname) byName.set(m.nickname.toLowerCase(), m.id);

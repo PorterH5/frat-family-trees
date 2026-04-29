@@ -6,6 +6,11 @@ import {
   updateMemberAction,
   type MemberState,
 } from "@/app/chapters/actions";
+import {
+  isEarlierPledgeClass,
+  isLaterPledgeClass,
+  comparePledgeClass,
+} from "@/lib/pledge-class";
 
 const initial: MemberState = {};
 
@@ -102,29 +107,34 @@ export function MemberForm({
     });
   };
 
-  const bigOptions = members.filter((m) => {
-    if (existing && m.id === existing.id) return false;
-    if (!normalizedPledgeClass) return true;
-    const candidatePc = (m.pledgeClass ?? "").trim().toLowerCase();
-    return candidatePc !== normalizedPledgeClass;
-  });
+  // Bigs must come from a strictly EARLIER pledge class than this member.
+  // If the member has no class selected, any candidate is allowed (we can't
+  // compare yet).
+  const bigOptions = members
+    .filter((m) => {
+      if (existing && m.id === existing.id) return false;
+      if (!pledgeClass.trim()) return true;
+      return isEarlierPledgeClass(m.pledgeClass, pledgeClass);
+    })
+    .sort((a, b) => -comparePledgeClass(a.pledgeClass, b.pledgeClass)); // most recent first
 
-  // Candidates eligible to be a *little* of `existing`. Excludes self,
-  // members in the same pledge class, and members in the current member's
-  // ancestor chain (which would form a cycle if they became a little).
+  // Candidates eligible to be a *little* of `existing`. Excludes self, anyone
+  // in the current member's ancestor chain (prevents cycles), and anyone
+  // whose pledge class is not strictly LATER than the current member's class.
   const ancestorIds = useMemo(() => {
     if (!existing) return new Set<string>();
     return ancestorsOf(existing.id, byId);
   }, [existing, byId]);
 
   const littleCandidates = existing
-    ? members.filter((m) => {
-        if (m.id === existing.id) return false;
-        if (ancestorIds.has(m.id)) return false;
-        if (!normalizedPledgeClass) return true;
-        const candidatePc = (m.pledgeClass ?? "").trim().toLowerCase();
-        return candidatePc !== normalizedPledgeClass;
-      })
+    ? members
+        .filter((m) => {
+          if (m.id === existing.id) return false;
+          if (ancestorIds.has(m.id)) return false;
+          if (!pledgeClass.trim()) return true;
+          return isLaterPledgeClass(m.pledgeClass, pledgeClass);
+        })
+        .sort((a, b) => comparePledgeClass(a.pledgeClass, b.pledgeClass))
     : [];
 
   return (
@@ -226,8 +236,8 @@ export function MemberForm({
           ))}
         </select>
         <span className="text-xs text-zinc-500">
-          Members in the same pledge class are hidden — a big must come from a
-          different pledge class.
+          Only members from pledge classes that are strictly earlier than this
+          member&rsquo;s class are shown.
         </span>
       </label>
 
@@ -237,7 +247,7 @@ export function MemberForm({
           {littleCandidates.length === 0 ? (
             <p className="text-xs text-zinc-500">
               {pledgeClass.trim()
-                ? `No eligible candidates outside the "${pledgeClass.trim()}" pledge class yet.`
+                ? `No candidates from pledge classes later than "${pledgeClass.trim()}" yet.`
                 : "Add a pledge class above to filter candidates."}
             </p>
           ) : (
@@ -284,8 +294,9 @@ export function MemberForm({
             </div>
           )}
           <span className="text-xs text-zinc-500">
-            Checking someone here makes them this member&rsquo;s little (sets
-            their big). Unchecking an existing little clears their big.
+            Only members from pledge classes that are strictly later than this
+            member&rsquo;s class are shown. Checking someone here makes them
+            this member&rsquo;s little; unchecking clears their big.
           </span>
         </fieldset>
       )}
