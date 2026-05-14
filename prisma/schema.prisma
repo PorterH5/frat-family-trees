@@ -1,0 +1,96 @@
+// Fraternity Family Trees — database schema
+// See https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client"
+  output   = "../src/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum Role {
+  ADMIN
+  MEMBER
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  name         String?
+  passwordHash String
+  createdAt    DateTime @default(now())
+
+  memberships     ChapterMembership[]
+  createdChapters Chapter[]           @relation("ChapterCreator")
+  createdMembers  Member[]            @relation("MemberCreator")
+  createdInvites  Invite[]            @relation("InviteCreator")
+}
+
+model Chapter {
+  id          String   @id @default(cuid())
+  slug        String   @unique
+  name        String // e.g., "Alpha" chapter designation
+  fraternity  String // e.g., "Sigma Chi"
+  school      String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  createdBy   User                @relation("ChapterCreator", fields: [createdById], references: [id])
+  memberships ChapterMembership[]
+  members     Member[]
+  invites     Invite[]
+}
+
+model ChapterMembership {
+  id        String   @id @default(cuid())
+  chapterId String
+  userId    String
+  role      Role     @default(MEMBER)
+  createdAt DateTime @default(now())
+
+  chapter Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([chapterId, userId])
+  @@index([userId])
+}
+
+model Member {
+  id          String   @id @default(cuid())
+  chapterId   String
+  firstName   String
+  lastName    String?
+  nickname    String?
+  pledgeClass String? // e.g., "Fall 2023"
+  bigId       String?
+  notes       String?
+  createdById String
+  createdAt   DateTime @default(now())
+
+  chapter   Chapter  @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  big       Member?  @relation("BigLittle", fields: [bigId], references: [id])
+  littles   Member[] @relation("BigLittle")
+  createdBy User     @relation("MemberCreator", fields: [createdById], references: [id])
+
+  @@index([chapterId])
+  @@index([bigId])
+}
+
+model Invite {
+  id          String    @id @default(cuid())
+  chapterId   String
+  token       String    @unique
+  role        Role      @default(MEMBER)
+  createdById String
+  createdAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  maxUses     Int?
+  uses        Int       @default(0)
+
+  chapter   Chapter @relation(fields: [chapterId], references: [id], onDelete: Cascade)
+  createdBy User    @relation("InviteCreator", fields: [createdById], references: [id])
+
+  @@index([chapterId])
+}

@@ -1,36 +1,97 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Frat Family Trees
 
-## Getting Started
+A web app for building and visualizing fraternity family trees. Add pledge class brothers in bulk, assign big/little relationships, and see every lineage automatically rendered as an interactive tree. Invite other brothers to contribute via shareable links.
 
-First, run the development server:
+## Features
+
+- **Chapters** — create a chapter for your fraternity (e.g. "Sigma Chi — Alpha" at Purdue).
+- **Members** — add brothers individually or paste an entire pledge class at once.
+- **Bulk-add parsing** — supports `First Last`, `First Last (Nickname)`, and `First Last - Big: Big Name`.
+- **Big / little lineage** — assign a big to any member; the family tree updates automatically.
+- **Tree visualization** — pan/zoom interactive tree built with `react-d3-tree`. Switch between the full forest and individual family lines.
+- **Shareable invite links** — admins can generate invite links (with optional expiry and max uses) and share by email, text, DM, etc.
+
+## Tech stack
+
+- [Next.js 16](https://nextjs.org/) (App Router, Server Actions) + React 19
+- TypeScript, Tailwind CSS v4
+- Prisma 7 + PostgreSQL
+- `iron-session` for session cookies, `bcryptjs` for password hashing
+- `react-d3-tree` for tree rendering
+- `zod` for input validation
+
+## Local development
+
+### Prerequisites
+
+- Node.js 20.19+ or 22.13+
+- Docker (for the bundled Postgres) **or** any Postgres 14+ instance
+
+### 1. Install dependencies
+
+```bash
+npm install
+```
+
+### 2. Configure environment
+
+```bash
+cp .env.example .env
+# edit .env if your Postgres URL differs or to set a custom SESSION_PASSWORD
+```
+
+Generate a strong `SESSION_PASSWORD` with:
+
+```bash
+openssl rand -base64 48
+```
+
+### 3. Start Postgres (using Docker)
+
+```bash
+docker run -d --name frat-postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_DB=frat_family_trees \
+  -p 5432:5432 postgres:16-alpine
+```
+
+### 4. Apply database migrations
+
+```bash
+npx prisma migrate dev
+```
+
+### 5. Run the dev server
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000).
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+## Deployment
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Any host that can run Next.js works (Vercel is the easiest). You'll need:
 
-## Learn More
+- A Postgres database (e.g. Neon, Supabase, RDS). Set `DATABASE_URL`.
+- A random `SESSION_PASSWORD` (32+ chars).
+- Run `npx prisma migrate deploy` on deploy.
 
-To learn more about Next.js, take a look at the following resources:
+## Usage walkthrough
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+1. Sign up at `/signup`.
+2. Create a chapter at `/chapters/new`.
+3. Bulk-add your pledge class from the chapter page.
+4. Edit members to assign bigs, creating the lineage.
+5. Click **View tree** to see the family tree visualization.
+6. From **Invites**, generate a shareable link and send it to brothers.
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## Scripts
 
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `npm run dev` — local dev server
+- `npm run build` — production build
+- `npm run start` — run built app
+- `npm run lint` — ESLint
+- `npx prisma studio` — visual DB explorer
+- `npx prisma migrate dev` — create/apply dev migration
